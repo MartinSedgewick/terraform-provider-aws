@@ -27,6 +27,8 @@ func TestAccAwsBackupPlan_basic(t *testing.T) {
 					testAccCheckAwsBackupPlanExists("aws_backup_plan.test", &plan),
 					testAccMatchResourceAttrRegionalARN("aws_backup_plan.test", "arn", "backup", regexp.MustCompile(`backup-plan:.+`)),
 					resource.TestCheckResourceAttrSet("aws_backup_plan.test", "version"),
+					resource.TestCheckResourceAttr("aws_backup_plan.test", "rule.#", "1"),
+					resource.TestCheckNoResourceAttr("aws_backup_plan.test", "rule.712706565.lifecycle.#"),
 				),
 			},
 		},
@@ -159,6 +161,50 @@ func TestAccAwsBackupPlan_withLifecycle(t *testing.T) {
 				Check: resource.ComposeTestCheckFunc(
 					testAccCheckAwsBackupPlanExists("aws_backup_plan.test", &plan),
 					resource.TestCheckResourceAttr("aws_backup_plan.test", "rule.1028372010.lifecycle.#", "1"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccAwsBackupPlan_withLifecycleDeleteAfterOnly(t *testing.T) {
+	var plan backup.GetBackupPlanOutput
+	rStr := "lifecycle_policy_two"
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:     func() { testAccPreCheck(t) },
+		Providers:    testAccProviders,
+		CheckDestroy: testAccCheckAwsBackupPlanDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccBackupPlanWithLifecycleDeleteAfterOnly(rStr),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAwsBackupPlanExists("aws_backup_plan.test", &plan),
+					resource.TestCheckResourceAttr("aws_backup_plan.test", "rule.2156287050.lifecycle.#", "1"),
+					resource.TestCheckResourceAttr("aws_backup_plan.test", "rule.2156287050.lifecycle.0.delete_after", "7"),
+					resource.TestCheckResourceAttr("aws_backup_plan.test", "rule.2156287050.lifecycle.0.cold_storage_after", "0"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccAwsBackupPlan_withLifecycleColdStorageAfterOnly(t *testing.T) {
+	var plan backup.GetBackupPlanOutput
+	rStr := "lifecycle_policy_three"
+
+	resource.ParallelTest(t, resource.TestCase{
+		PreCheck:     func() { testAccPreCheck(t) },
+		Providers:    testAccProviders,
+		CheckDestroy: testAccCheckAwsBackupPlanDestroy,
+		Steps: []resource.TestStep{
+			{
+				Config: testAccBackupPlanWithLifecycleColdStorageAfterOnly(rStr),
+				Check: resource.ComposeTestCheckFunc(
+					testAccCheckAwsBackupPlanExists("aws_backup_plan.test", &plan),
+					resource.TestCheckResourceAttr("aws_backup_plan.test", "rule.1300859512.lifecycle.#", "1"),
+					resource.TestCheckResourceAttr("aws_backup_plan.test", "rule.1300859512.lifecycle.0.delete_after", "0"),
+					resource.TestCheckResourceAttr("aws_backup_plan.test", "rule.1300859512.lifecycle.0.cold_storage_after", "7"),
 				),
 			},
 		},
@@ -332,6 +378,48 @@ resource "aws_backup_plan" "test" {
     lifecycle {
         cold_storage_after = 30
         delete_after       = 160
+    }
+  }
+}
+`, stringID, stringID, stringID)
+}
+
+func testAccBackupPlanWithLifecycleDeleteAfterOnly(stringID string) string {
+	return fmt.Sprintf(`
+resource "aws_backup_vault" "test" {
+  name = "tf_acc_test_backup_vault_%s"
+}
+
+resource "aws_backup_plan" "test" {
+  name = "tf_acc_test_backup_plan_%s"
+
+  rule {
+    rule_name          = "tf_acc_test_backup_rule_%s"
+    target_vault_name  = "${aws_backup_vault.test.name}"
+    schedule           = "cron(0 12 * * ? *)"
+    lifecycle {
+        delete_after       = "7"
+    }
+  }
+}
+`, stringID, stringID, stringID)
+}
+
+func testAccBackupPlanWithLifecycleColdStorageAfterOnly(stringID string) string {
+	return fmt.Sprintf(`
+resource "aws_backup_vault" "test" {
+  name = "tf_acc_test_backup_vault_%s"
+}
+
+resource "aws_backup_plan" "test" {
+  name = "tf_acc_test_backup_plan_%s"
+
+  rule {
+    rule_name          = "tf_acc_test_backup_rule_%s"
+    target_vault_name  = "${aws_backup_vault.test.name}"
+    schedule           = "cron(0 12 * * ? *)"
+    lifecycle {
+        cold_storage_after       = "7"
     }
   }
 }
